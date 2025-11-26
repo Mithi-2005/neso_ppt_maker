@@ -1,2 +1,0 @@
-error
-A process in the process pool was terminated abruptly while the future was running or pending.
