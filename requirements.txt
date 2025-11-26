@@ -7,3 +7,4 @@ imagehash==4.3.1
 pytubefix==6.15.1
 python-pptx==0.6.21
 requests==2.31.0
+yt-dlp

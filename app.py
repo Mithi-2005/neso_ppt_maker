@@ -51,6 +51,19 @@ def get_job_paths(job_id):
     return job_dir, video_path, slides_dir, ppt_path
 
 
+def mark_job_completed(job_id):
+    """Mark a job as completed (success or error) so it can be cleaned after TTL."""
+    try:
+        job_dir = os.path.join(JOBS_ROOT, job_id)
+        os.makedirs(job_dir, exist_ok=True)
+        flag_path = os.path.join(job_dir, "completed.flag")
+        # store a timestamp (not strictly required, mtime is enough)
+        with open(flag_path, "w", encoding="utf-8") as f:
+            f.write(str(time.time()))
+    except Exception as e:
+        log_error(e)
+
+
 def run_extraction(url, job_id):
     job_dir, video_path, slides_dir, ppt_path = get_job_paths(job_id)
     try:
@@ -71,6 +84,7 @@ def run_extraction(url, job_id):
         generate_ppt(slide_paths, ppt_path)
 
         write_status(job_id, "done", "PPT generated")
+        mark_job_completed(job_id)
     except Exception as e:
         log_error(e)
         error_path = os.path.join(job_dir, "error.txt")
@@ -80,12 +94,18 @@ def run_extraction(url, job_id):
         except Exception as ef_exc:
             log_error(ef_exc)
         write_status(job_id, "error", str(e))
+        mark_job_completed(job_id)
 
 
-def cleanup_jobs(max_age_hours=24):
-    """Delete job folders older than max_age_hours."""
+def cleanup_jobs(max_age_minutes=30):
+    """Delete completed job folders older than max_age_minutes.
+
+    A job is considered completed if it has a completed.flag file. The mtime of this
+    flag is used as the completion time, so jobs are removed ~30 minutes after they
+    finish (success or error).
+    """
     now = time.time()
-    cutoff = now - max_age_hours * 3600
+    cutoff = now - max_age_minutes * 60
 
     try:
         os.makedirs(JOBS_ROOT, exist_ok=True)
@@ -93,8 +113,14 @@ def cleanup_jobs(max_age_hours=24):
             path = os.path.join(JOBS_ROOT, name)
             if not os.path.isdir(path):
                 continue
+
+            flag_path = os.path.join(path, "completed.flag")
+            if not os.path.exists(flag_path):
+                # skip jobs that are not yet completed
+                continue
+
             try:
-                mtime = os.path.getmtime(path)
+                mtime = os.path.getmtime(flag_path)
             except OSError as e:
                 log_error(e)
                 continue
@@ -133,6 +159,9 @@ def process():
 
 @app.route("/status/<job_id>", methods=["GET"])
 def status(job_id):
+    # opportunistic cleanup of old completed jobs
+    cleanup_jobs()
+
     job_dir, video_path, slides_dir, ppt_path = get_job_paths(job_id)
     if not os.path.exists(job_dir):
         return jsonify({"status": "not_found"}), 404
@@ -172,6 +201,8 @@ def status(job_id):
 
 @app.route("/download/<job_id>", methods=["GET"])
 def download(job_id):
+    # opportunistic cleanup of old completed jobs
+    cleanup_jobs()
     _, _, slides_dir, ppt_path = get_job_paths(job_id)
 
     if not os.path.exists(ppt_path):
