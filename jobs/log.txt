@@ -1,0 +1,4 @@
+2025-11-26T15:57:20.884658 - BrokenProcessPool('A process in the process pool was terminated abruptly while the future was running or pending.')
+2025-11-26T15:59:27.279975 - BrokenProcessPool('A process in the process pool was terminated abruptly while the future was running or pending.')
+2025-11-26T16:01:16.613237 - BrokenProcessPool('A process in the process pool was terminated abruptly while the future was running or pending.')
+2025-11-26T16:12:51.489587 - MaxRetriesExceeded('Maximum number of retries exceeded')
