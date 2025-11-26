@@ -5,7 +5,7 @@ from PIL import Image
 import imagehash
 
 
-def extract_slides(video_path, slides_folder="temp/slides"):
+def extract_slides(video_path, slides_folder="temp/slides", progress_callback=None):
     os.makedirs(slides_folder, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
@@ -46,82 +46,6 @@ def extract_slides(video_path, slides_folder="temp/slides"):
     ret, initial_frame = cap.read()
     if not ret:
         return []
-    
-    # Process initial frame for comparison
-    prev_small = cv2.resize(initial_frame, (RESIZE_W, RESIZE_H))
-    prev_small = cv2.GaussianBlur(prev_small, BLUR_KERNEL, 0)
-    prev_gray = cv2.cvtColor(prev_small, cv2.COLOR_BGR2GRAY)
-    
-    # Treat the first frame as the first stable frame
-    last_stable_start_frame = initial_frame.copy() 
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        frame_id += 1
-        current_original_frame = frame.copy() # Store original frame for potential save
-
-        # --- Sampling ---
-        if frame_id % SAMPLE_RATE != 0:
-            continue
-
-        # --- Preprocessing ---
-        small = cv2.resize(current_original_frame, (RESIZE_W, RESIZE_H))
-        small = cv2.GaussianBlur(small, BLUR_KERNEL, 0)
-        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-
-        # --- Difference Calculation ---
-        diff = cv2.absdiff(prev_gray, gray)
-        _, mask = cv2.threshold(diff, 15, 255, cv2.THRESH_BINARY) # Threshold to detect "changed" pixels
-
-        changed = np.count_nonzero(mask)
-        total = RESIZE_W * RESIZE_H
-        change_percent = changed / total
-
-        # --- Stability Check ---
-        if change_percent < CHANGE_PERCENT_THRESHOLD:
-            # Frame is stable
-            consecutive_stable_samples += 1
-        else:
-            # Frame is actively changing (slide transition or animation)
-            consecutive_stable_samples = 0
-            is_stable_slide_active = False # New change has started
-
-        # --- Slide Saving Logic (Duplicate Prevention) ---
-
-        # Condition 1: Stable for the required number of *samples*
-        if consecutive_stable_samples >= MIN_STABLE_SAMPLES:
-            
-            # Save the slide ONLY if this is the FIRST time we crossed the stability threshold
-            if not is_stable_slide_active:
-                
-                # Check if the slide also meets the minimum time duration requirement
-                # Note: We save the frame *before* the current frame_id, because the stable period was confirmed
-                # over the previous samples. We need to save the frame at the start of the stability.
-                
-                slide_path = f"{slides_folder}/slide_{slide_id}.jpg"
-                cv2.imwrite(slide_path, last_stable_start_frame) # Save the representative frame
-                slide_paths.append(slide_path)
-                slide_id += 1
-                
-                is_stable_slide_active = True # LOCK: Prevent saving again until a change breaks the stability
-                last_stable_start_frame_id = frame_id # Mark the end of the transition period
-
-        # --- Update previous state for next sampled frame ---
-        prev_gray = gray
-        
-        # If the slide is NOT stable, update the representative frame to the *current* original frame
-        # This frame will become the start of the next potential stable slide.
-        if not is_stable_slide_active:
-            last_stable_start_frame = current_original_frame.copy()
-
-    cap.release()
-
-    
-    if is_stable_slide_active:
-        # Save the last stable frame (since the loop ended, no new change will break stability)
         # We need a dedicated final check to save the last slide if it was stable
         pass # The initial frame handling covers this case effectively if the slide lasts long enough.
     cap.release()

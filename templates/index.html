@@ -505,6 +505,19 @@
             font-weight: 600;
             color: var(--text);
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-percentage {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: var(--accent);
+            background: var(--accent-soft);
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
 
         .status-subtitle {
@@ -550,6 +563,57 @@
             color: var(--error);
             background: rgba(239, 68, 68, 0.1);
             border-left-color: var(--error);
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 16px;
+            width: 100%;
+        }
+
+        .progress-bar-wrapper {
+            width: 100%;
+            height: 8px;
+            background: rgba(15, 20, 32, 0.8);
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent) 0%, var(--accent-light) 100%);
+            border-radius: 999px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.3) 50%,
+                transparent 100%
+            );
+            animation: progress-shimmer 2s infinite;
+        }
+
+        @keyframes progress-shimmer {
+            0% { left: -100%; }
+            100% { left: 200%; }
+        }
+
+        .progress-bar-fill.complete {
+            background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
         }
 
         /* Download Buttons */
@@ -837,8 +901,17 @@
                             <div class="pulse-indicator"></div>
                         </div>
                         <div class="status-info">
-                            <div class="status-title" id="status-title">Ready to Process</div>
+                            <div class="status-title" id="status-title">
+                                <span id="status-title-text">Ready to Process</span>
+                                <span class="progress-percentage hidden" id="progress-percentage">0%</span>
+                            </div>
                             <div class="status-subtitle" id="status-subtitle">Paste a YouTube URL and click Generate to begin</div>
+                        </div>
+                    </div>
+
+                    <div class="progress-container hidden" id="progress-container">
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar-fill" id="progress-bar-fill"></div>
                         </div>
                     </div>
 
@@ -898,9 +971,12 @@
         const urlInput = document.getElementById('yt-url');
         const submitBtn = document.getElementById('submit-btn');
         const statusIndicator = document.getElementById('status-indicator');
-        const statusTitle = document.getElementById('status-title');
+        const statusTitleText = document.getElementById('status-title-text');
         const statusSubtitle = document.getElementById('status-subtitle');
         const statusMessage = document.getElementById('status-message');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
         const downloads = document.getElementById('downloads');
         const downloadPpt = document.getElementById('download-ppt');
         const downloadSlides = document.getElementById('download-slides');
@@ -916,17 +992,37 @@
             }
             submitBtn.disabled = false;
             statusIndicator.innerHTML = '<div class="pulse-indicator"></div>';
-            statusTitle.textContent = 'Ready to Process';
+            statusTitleText.textContent = 'Ready to Process';
             statusSubtitle.textContent = 'Paste a YouTube URL and click Generate to begin';
             statusMessage.classList.add('hidden');
             statusMessage.classList.remove('error');
+            progressPercentage.classList.add('hidden');
+            progressContainer.classList.add('hidden');
             downloads.classList.add('hidden');
         }
 
-        function setProcessingState(title, subtitle, message) {
+        function updateProgress(percentage) {
+            if (percentage !== null && percentage !== undefined) {
+                progressPercentage.textContent = percentage + '%';
+                progressPercentage.classList.remove('hidden');
+                progressContainer.classList.remove('hidden');
+                progressBarFill.style.width = percentage + '%';
+                
+                if (percentage >= 100) {
+                    progressBarFill.classList.add('complete');
+                } else {
+                    progressBarFill.classList.remove('complete');
+                }
+            } else {
+                progressPercentage.classList.add('hidden');
+                progressContainer.classList.add('hidden');
+            }
+        }
+
+        function setProcessingState(title, subtitle, message, percentage) {
             submitBtn.disabled = true;
             statusIndicator.innerHTML = '<div class="loader"></div>';
-            statusTitle.textContent = title;
+            statusTitleText.textContent = title;
             statusSubtitle.innerHTML = subtitle + '<span class="dots"><span></span><span></span><span></span></span>';
             
             if (message) {
@@ -936,32 +1032,36 @@
                 statusMessage.classList.add('hidden');
             }
             
+            updateProgress(percentage);
             downloads.classList.add('hidden');
         }
 
         function setDoneState() {
             submitBtn.disabled = false;
             statusIndicator.innerHTML = '<div class="pulse-indicator"></div>';
-            statusTitle.textContent = 'Complete!';
+            statusTitleText.textContent = 'Complete!';
             statusSubtitle.textContent = 'Your presentation is ready to download';
             statusMessage.classList.add('hidden');
             statusMessage.classList.remove('error');
+            updateProgress(100);
             downloads.classList.remove('hidden');
         }
 
         function setErrorState(message) {
             submitBtn.disabled = false;
             statusIndicator.innerHTML = '<div class="pulse-indicator"></div>';
-            statusTitle.textContent = 'Processing Failed';
+            statusTitleText.textContent = 'Processing Failed';
             statusSubtitle.textContent = 'Please check the URL and try again';
             statusMessage.textContent = message || 'An unknown error occurred';
             statusMessage.classList.remove('hidden');
             statusMessage.classList.add('error');
+            progressPercentage.classList.add('hidden');
+            progressContainer.classList.add('hidden');
             downloads.classList.add('hidden');
         }
 
         async function startJob(url) {
-            setProcessingState('Submitting Job', 'Connecting to backend', 'Initializing processing pipeline...');
+            setProcessingState('Submitting Job', 'Connecting to backend', 'Initializing processing pipeline...', 0);
             
             try {
                 const resp = await fetch('/process', {
@@ -979,7 +1079,7 @@
 
                 const data = await resp.json();
                 currentJobId = data.job_id;
-                setProcessingState('Downloading Video', 'Fetching content from YouTube', 'Job created successfully');
+                setProcessingState('Analyzing Video', 'Preparing to fetch video content', 'Job created successfully', 0);
 
                 // Begin polling status
                 pollTimer = setInterval(pollStatus, 1500);
@@ -1004,10 +1104,11 @@
                 const data = await resp.json();
 
                 if (data.status === 'processing') {
-                    const title = 'Processing';
-                    const subtitle = 'Extracting and analyzing slides';
-                    const message = data.message || 'Downloading video, extracting slides, and generating presentation...';
-                    setProcessingState(title, subtitle, message);
+                    const stage = data.stage || 'Processing';
+                    const subtitle = data.message || 'Working on your presentation...';
+                    const message = data.message || '';
+                    const percentage = data.percentage || 0;
+                    setProcessingState(stage, subtitle, message, percentage);
                 } else if (data.status === 'done') {
                     clearInterval(pollTimer);
                     pollTimer = null;

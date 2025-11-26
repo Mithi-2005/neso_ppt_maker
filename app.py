@@ -30,7 +30,7 @@ def log_error(e):
         print("Failed to write log:", log_exc)
 
 
-def write_status(job_id, status, message=None):
+def write_status(job_id, status, message=None, percentage=None, stage=None):
     try:
         job_dir = os.path.join(JOBS_ROOT, job_id)
         os.makedirs(job_dir, exist_ok=True)
@@ -39,6 +39,10 @@ def write_status(job_id, status, message=None):
             f.write(status)
             if message:
                 f.write("\n" + message)
+            if percentage is not None:
+                f.write("\n" + str(percentage))
+            if stage:
+                f.write("\n" + stage)
     except Exception as e:
         log_error(e)
 
@@ -68,22 +72,76 @@ def run_extraction(url, job_id):
     job_dir, video_path, slides_dir, ppt_path = get_job_paths(job_id)
     try:
         os.makedirs(job_dir, exist_ok=True)
-        write_status(job_id, "processing", "Downloading video…")
-
-        # Step 1: Download video
+        
+        # Stage 1: Analyzing Video (0-100%)
+        write_status(job_id, "processing", "Starting video analysis…", 0, "Analyzing Video")
+        
+        # Simulate gradual progress during download
+        import threading
+        stop_progress = threading.Event()
+        
+        def simulate_download_progress():
+            progress = 10
+            while not stop_progress.is_set() and progress < 90:
+                time.sleep(4)  # Update every 4 seconds
+                if not stop_progress.is_set():
+                    progress = min(progress + 10, 90)  # Slower increments
+                    write_status(job_id, "processing", "Fetching video content…", progress, "Analyzing Video")
+        
+        progress_thread = threading.Thread(target=simulate_download_progress)
+        progress_thread.start()
+        
         download_video(url, video_path)
+        
+        stop_progress.set()
+        progress_thread.join()
+        write_status(job_id, "processing", "Video analysis complete", 100, "Analyzing Video")
 
-        write_status(job_id, "processing", "Extracting slides…")
-
-        # Step 2: Extract unique slides
+        # Stage 2: Extracting Slides (0-100%)
+        write_status(job_id, "processing", "Starting slide extraction…", 0, "Extracting Slides")
+        
+        stop_progress2 = threading.Event()
+        
+        def simulate_extraction_progress():
+            progress = 10
+            while not stop_progress2.is_set() and progress < 85:
+                time.sleep(5)  # Update every 5 seconds
+                if not stop_progress2.is_set():
+                    progress = min(progress + 15, 85)  # Slower increments
+                    write_status(job_id, "processing", "Analyzing frames…", progress, "Extracting Slides")
+        
+        progress_thread2 = threading.Thread(target=simulate_extraction_progress)
+        progress_thread2.start()
+        
         slide_paths = extract_slides(video_path, slides_dir)
+        
+        stop_progress2.set()
+        progress_thread2.join()
+        write_status(job_id, "processing", "Slide extraction complete", 100, "Extracting Slides")
 
-        write_status(job_id, "processing", "Generating PPT…")
-
-        # Step 3: Generate PPT
+        # Stage 3: Generating Presentation (0-100%)
+        write_status(job_id, "processing", "Creating presentation…", 0, "Generating Presentation")
+        
+        stop_progress3 = threading.Event()
+        
+        def simulate_ppt_progress():
+            progress = 20
+            while not stop_progress3.is_set() and progress < 80:
+                time.sleep(2)  # Update every 2 seconds
+                if not stop_progress3.is_set():
+                    progress = min(progress + 20, 80)  # Slower increments
+                    write_status(job_id, "processing", "Building slides…", progress, "Generating Presentation")
+        
+        progress_thread3 = threading.Thread(target=simulate_ppt_progress)
+        progress_thread3.start()
+        
         generate_ppt(slide_paths, ppt_path)
+        
+        stop_progress3.set()
+        progress_thread3.join()
+        write_status(job_id, "processing", "Presentation ready", 100, "Generating Presentation")
 
-        write_status(job_id, "done", "PPT generated")
+        write_status(job_id, "done", "Processing complete", 100, "Complete")
         mark_job_completed(job_id)
     except Exception as e:
         log_error(e)
@@ -191,10 +249,22 @@ def status(job_id):
                 lines = f.read().splitlines()
             status_value = lines[0] if lines else "processing"
             message = lines[1] if len(lines) > 1 else None
+            percentage = int(lines[2]) if len(lines) > 2 else None
+            stage = lines[3] if len(lines) > 3 else None
         except Exception:
             status_value = "processing"
             message = None
-        return jsonify({"status": status_value, "message": message})
+            percentage = None
+            stage = None
+        
+        response = {"status": status_value}
+        if message:
+            response["message"] = message
+        if percentage is not None:
+            response["percentage"] = percentage
+        if stage:
+            response["stage"] = stage
+        return jsonify(response)
 
     return jsonify({"status": "processing"})
 
